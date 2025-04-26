@@ -1,6 +1,9 @@
 from pprint import pprint
 import json
-from openai import OpenAI
+from groq import Groq
+import inspect
+from pydantic import TypeAdapter
+import requests
 
 # Implement 3 hàm
 
@@ -18,57 +21,69 @@ def get_stock_price(symbol: str):
 
 # Bài 2: Implement hàm `view_website`, sử dụng `requests` và JinaAI để đọc markdown từ URL
 def view_website(url: str):
-    # Không làm gì cả, để hàm trống
-    pass
+    """View a website and convert it to markdown using JinaAI"""
+    # Sử dụng JinaAI để đọc markdown từ URL
+    jina_url = f'https://r.jina.ai/https://{url}'
+    headers = {
+        'Authorization': 'Bearer jina_68d9645b3fb2f41ddbb50ec58a665bc13392SbLmxlVjCRTQowOjxML_OW51KC'
+    }
+    
+    response = requests.get(url=jina_url, headers=headers)
+    return response.text
 
 
 # Bài 1: Thay vì tự viết object `tools`, hãy xem lại bài trước, sửa code và dùng `inspect` và `TypeAdapter` để define `tools`
-tools = [
-    {
+def function_to_tool(func):
+    """Chuyển đổi một hàm thành tool theo định dạng API của OpenAI"""
+    signature = inspect.signature(func)
+    parameters = {}
+    required = []
+    
+    for name, param in signature.parameters.items():
+        param_type = param.annotation
+        if param_type is inspect.Parameter.empty:
+            param_type = "string"
+        else:
+            param_type = str(param_type).replace("<class '", "").replace("'>", "")
+            
+        if param_type == "str":
+            param_type = "string"
+        elif param_type == "int" or param_type == "float":
+            param_type = "number"
+        elif param_type == "bool":
+            param_type = "boolean"
+        
+        parameters[name] = {
+            "type": param_type
+        }
+        
+        if param.default is inspect.Parameter.empty:
+            required.append(name)
+    
+    return {
         "type": "function",
         "function": {
-            "name": "get_current_weather",
-            "description": "Get the current weather in a given location",
+            "name": func.__name__,
+            "description": func.__doc__ or f"Call the function {func.__name__}",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city name"
-                    },
-                    "unit": {
-                        "type": "string",
-                        "enum": ["celsius", "fahrenheit"],
-                        "description": "The temperature unit"
-                    }
-                },
-                "required": ["location", "unit"]
+                "properties": parameters,
+                "required": required
             }
         }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_stock_price",
-            "description": "Get the current stock price of a given symbol",
-            "parameters": {"type": "object", "properties": {"symbol": {"type": "string"}}, "required": ["symbol"]}
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "view_website",
-            "description": "View a website",
-            "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}
-        }
     }
+
+tools = [
+    function_to_tool(get_current_weather),
+    function_to_tool(get_stock_price),
+    function_to_tool(view_website)
 ]
 
-# https://platform.openai.com/api-keys
-client = OpenAI(
-    api_key='sk-proj-XXXX',
+# https://console.groq.com/apis
+client = Groq(
+    api_key='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',
 )
-COMPLETION_MODEL = "gpt-4o-mini"
+COMPLETION_MODEL = "llama3-70b-8192"
 
 messages = [{"role": "user", "content": "Thời tiết ở Hà Nội hôm nay thế nào?"}]
 

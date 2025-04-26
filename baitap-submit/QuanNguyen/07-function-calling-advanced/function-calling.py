@@ -81,7 +81,7 @@ tools = [
 
 # https://console.groq.com/apis
 client = Groq(
-    api_key='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',
+    api_key='',
 )
 COMPLETION_MODEL = "llama3-70b-8192"
 

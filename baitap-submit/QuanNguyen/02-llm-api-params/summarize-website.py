@@ -1,9 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 from groq import Groq
+import os
 
 client = Groq(
-    api_key=''
+    api_key=os.getenv('GROQ_API_KEY', '')
 )
 
 def summarize_website():

@@ -1,7 +1,8 @@
+import os
 from groq import Groq
 
 client = Groq(
-    api_key=''
+    api_key=os.getenv('GROQ_API_KEY', '')
 )
 
 
@@ -24,6 +25,6 @@ def simple_chat():
 
 if __name__ == "__main__":
     simple_chat()
-    
+
 
 

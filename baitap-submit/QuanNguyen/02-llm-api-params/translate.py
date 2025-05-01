@@ -1,8 +1,11 @@
 from groq import Groq
+from groq import Groq
+import os
 
 client = Groq(
-    api_key=''
+    api_key=os.getenv('GROQ_API_KEY', '')
 )
+
 
 def translate_file(input_file, output_file, target_language):
     with open(input_file, 'r', encoding='utf-8') as file:

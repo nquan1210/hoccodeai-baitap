@@ -4,6 +4,7 @@ from groq import Groq
 import inspect
 from pydantic import TypeAdapter
 import requests
+import os
 
 # Implement 3 hàm
 
@@ -15,6 +16,7 @@ def get_current_weather(location: str, unit: str):
 
 
 def get_stock_price(symbol: str):
+    """Get the current stock price for a given symbol"""
     # Không làm gì cả, để hàm trống
     pass
 
@@ -25,7 +27,7 @@ def view_website(url: str):
     # Sử dụng JinaAI để đọc markdown từ URL
     jina_url = f'https://r.jina.ai/https://{url}'
     headers = {
-        'Authorization': 'Bearer jina_68d9645b3fb2f41ddbb50ec58a665bc13392SbLmxlVjCRTQowOjxML_OW51KC'
+        'Authorization': os.getenv('JINA_API_KEY', '')
     }
     
     response = requests.get(url=jina_url, headers=headers)
@@ -33,55 +35,36 @@ def view_website(url: str):
 
 
 # Bài 1: Thay vì tự viết object `tools`, hãy xem lại bài trước, sửa code và dùng `inspect` và `TypeAdapter` để define `tools`
-def function_to_tool(func):
-    """Chuyển đổi một hàm thành tool theo định dạng API của OpenAI"""
-    signature = inspect.signature(func)
-    parameters = {}
-    required = []
-    
-    for name, param in signature.parameters.items():
-        param_type = param.annotation
-        if param_type is inspect.Parameter.empty:
-            param_type = "string"
-        else:
-            param_type = str(param_type).replace("<class '", "").replace("'>", "")
-            
-        if param_type == "str":
-            param_type = "string"
-        elif param_type == "int" or param_type == "float":
-            param_type = "number"
-        elif param_type == "bool":
-            param_type = "boolean"
-        
-        parameters[name] = {
-            "type": param_type
-        }
-        
-        if param.default is inspect.Parameter.empty:
-            required.append(name)
-    
-    return {
+tools = [
+    {
         "type": "function",
         "function": {
-            "name": func.__name__,
-            "description": func.__doc__ or f"Call the function {func.__name__}",
-            "parameters": {
-                "type": "object",
-                "properties": parameters,
-                "required": required
-            }
-        }
-    }
-
-tools = [
-    function_to_tool(get_current_weather),
-    function_to_tool(get_stock_price),
-    function_to_tool(view_website)
+            "name": "get_current_weather",
+            "description": inspect.getdoc(get_current_weather),
+            "parameters": TypeAdapter(get_current_weather).json_schema(),
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_price",
+            "description": inspect.getdoc(get_stock_price),
+            "parameters": TypeAdapter(get_stock_price).json_schema(),
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "view_website",
+            "description": inspect.getdoc(view_website),
+            "parameters": TypeAdapter(view_website).json_schema(),
+        },
+    },
 ]
 
 # https://console.groq.com/apis
 client = Groq(
-    api_key='',
+    api_key=os.getenv('GROQ_API_KEY', ''),
 )
 COMPLETION_MODEL = "llama3-70b-8192"
 
@@ -107,27 +90,30 @@ arguments = json.loads(tool_call.function.arguments)
 
 print("Bước 4: Chạy function get_current_weather ở máy mình")
 
-if tool_call.function.name == 'get_current_weather':
-    weather_result = get_current_weather(
-        arguments.get('location'), arguments.get('unit'))
-    # Hoặc code này cũng tương tự
-    # weather_result = get_current_weather(**arguments)
-    print(f"Kết quả bước 4: {weather_result}")
+FUNCTION_MAP = {
+    "get_current_weather": get_current_weather,
+    "get_stock_price": get_stock_price,
+    "view_website": view_website
+}
 
-    print("Bước 5: Gửi kết quả lên cho LLM")
-    messages.append(response.choices[0].message)
-    messages.append({
-        "role": "tool",
-        "content": weather_result,
-        "tool_call_id": tool_call.id
-    })
+# Dynamically call the function based on tool_call.function.name
 
-    pprint(messages)
+tool_function = FUNCTION_MAP[tool_call.function.name]
+result = tool_function(**arguments)
+print(f"Kết quả bước 4: {result}")
 
-    final_response = client.chat.completions.create(
-        model=COMPLETION_MODEL,
-        messages=messages
-        # Ở đây không có tools cũng không sao, vì ta không cần gọi nữa
-    )
-    print(
-        f"Kết quả cuối cùng từ LLM: {final_response.choices[0].message.content}.")
+print("Bước 5: Gửi kết quả lên cho LLM")
+messages.append(response.choices[0].message)
+messages.append({
+    "role": "tool",
+    "content": result,
+    "tool_call_id": tool_call.id
+})
+pprint(messages)
+final_response = client.chat.completions.create(
+    model=COMPLETION_MODEL,
+    messages=messages
+    # Ở đây không có tools cũng không sao, vì ta không cần gọi nữa
+)
+print(
+    f"Kết quả cuối cùng từ LLM: {final_response.choices[0].message.content}.")
